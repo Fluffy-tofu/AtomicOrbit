@@ -1,5 +1,5 @@
 import numpy as np
-from src.atomicorbital.orbital_maths.generell_functions.normalizsation_factor import normalization_factor
+from src.atomicorbit.orbital_maths.generell_functions.normalizsation_factor import normalization_factor
 # Konstanten
 a0 = 0.529177210903e-10  # Bohr-Radius in Metern
 def R_nl(n, l, r, Z=1):
