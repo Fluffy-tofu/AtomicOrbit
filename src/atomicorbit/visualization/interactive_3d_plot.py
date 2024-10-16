@@ -5,8 +5,8 @@ from tqdm import tqdm
 import math
 import colorsys
 from plotly.subplots import make_subplots
-from src.atomicorbit.orbital_maths.generell_functions.radial_part_wavefunc import R_nl
-from src.atomicorbit.orbital_maths.generell_functions.spherical_harmonic_func import Y_lm
+from atomicorbit.orbital_maths.generell_functions.radial_part_wavefunc import R_nl
+from atomicorbit.orbital_maths.generell_functions.spherical_harmonic_func import Y_lm
 
 
 def orbital_wavefunction(n, l, m, r, theta, phi):

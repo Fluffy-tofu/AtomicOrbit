@@ -10,7 +10,7 @@ Version: 1.1.0
 
 import argparse
 import sys
-from src.atomicorbit.visualization.interactive_3d_plot import plot_orbital_3d, plot_multiple_orbitals, plot_multiple_orbitals_single_plot
+from atomicorbit.visualization.interactive_3d_plot import plot_orbital_3d, plot_multiple_orbitals, plot_multiple_orbitals_single_plot
 
 # ASCII Logo
 LOGO = r"""
