@@ -91,7 +91,7 @@ def plot_orbital_3d(n, l, m, title, threshold=0.03, grid_size=60):
     return fig
 
 
-def plot_multiple_orbitals(electron_count, grid_size=70, max_orbitals=14):
+def plot_multiple_orbitals(electron_count, grid_size=70, max_orbitals=100):
     n_list, l_list, m_list, s_list = calculate_quantum_numbers(electron_count=electron_count)
     orbital_data, titles = create_orbital_data(n_list, l_list, m_list, "multiple")
     num_orbitals = min(len(orbital_data), max_orbitals)
@@ -276,7 +276,6 @@ def create_orbital_data(n_values, l_values, m_values, type_plot):
 
             orbital_data.append((x, y, z, prob_d))
             titles.append(f"Orbital (n={n}, l={l}, m={m})")
-
         return orbital_data, titles
 
     elif type_plot == "single":

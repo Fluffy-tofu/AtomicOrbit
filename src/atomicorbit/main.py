@@ -10,7 +10,9 @@ Version: 1.1.0
 
 import argparse
 import sys
-from atomicorbit.visualization.interactive_3d_plot import plot_orbital_3d, plot_multiple_orbitals, plot_multiple_orbitals_single_plot
+from atomicorbit.visualization.interactive_3d_plot import plot_orbital_3d, plot_multiple_orbitals, \
+    plot_multiple_orbitals_single_plot
+import os
 
 # ASCII Logo
 LOGO = r"""
@@ -101,6 +103,8 @@ def parse_arguments():
 
     parser.add_argument('-p', '--plot', choices=['single', 'multiple', 'all'],
                         required=True, help="Type of plot to generate")
+    parser.add_argument('--html', action='store_true', default=True,
+                        help="Save plot as HTML (default: True)")
 
     # Only require atom/electrons for multiple/all plots
     atom_group = parser.add_mutually_exclusive_group()
@@ -156,6 +160,10 @@ def main():
         args = parse_arguments()
         validate_args(args)
 
+        # Create an 'output' directory if it doesn't exist
+        output_dir = os.path.join(os.getcwd(), 'output')
+        os.makedirs(output_dir, exist_ok=True)
+
         if args.plot == 'single':
             fig = plot_orbital_3d(n=args.n, l=args.l, m=args.m,
                                   title=f"Orbital: n={args.n}, l={args.l}, m={args.m}")
@@ -172,8 +180,14 @@ def main():
                 fig = plot_multiple_orbitals_single_plot(electron_count=electron_count)
                 output_file = f"{element_name}_all_orbitals.html"
 
-        fig.write_html(output_file)
-        print(f"Plot generated successfully. Open '{output_file}' in your browser to view.")
+        if args.html is True or not args.html:
+            output_path = os.path.join(output_dir, output_file)
+            fig.write_html(output_path)
+            print(f"Plot generated successfully. Open '{output_path}' in your browser to view.")
+
+        else:
+            print(f"Plot not saved...\n"
+                  f"To save plot as html use -h True flag... ")
         print("Opening the plot in your browser...")
         fig.show()
 
