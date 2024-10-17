@@ -66,9 +66,10 @@ Single orbital (2p):
 Every orbital in separate plots for Neodymium:
 <img src="https://github.com/Fluffy-tofu/AtomicOrbit/blob/main/images/Bildschirmfoto%202024-10-17%20um%2008.22.47.png" alt="Multiple Orbitals" height="400">
 
-| Image 1       | Image 2       |
+|   Single Orbital (2p)       | All orbitals for Copper     |
 |---------------|---------------|
-| <img src="[image1_url](https://github.com/Fluffy-tofu/AtomicOrbit/blob/main/images/Bildschirmfoto%202024-10-17%20um%2007.55.20.png)" alt="Image 1" width="300"/> | <img src="[image2_url](https://github.com/Fluffy-tofu/AtomicOrbit/blob/main/images/Bildschirmfoto%202024-10-17%20um%2007.51.23.png)" alt="Image 2" width="300"/> |
+| <img src="https://github.com/Fluffy-tofu/AtomicOrbit/blob/main/images/Bildschirmfoto%202024-10-17%20um%2007.51.23.png" alt="Image 1" width="300"/> | <img src="https://github.com/Fluffy-tofu/AtomicOrbit/blob/main/images/Bildschirmfoto%202024-10-17%20um%2007.55.20.png" alt="Image 2" width="300"/> |
+
 
 ## Contributing
 
