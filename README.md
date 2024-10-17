@@ -36,12 +36,12 @@ AtomicOrbit can be used via the command line. Here are some example commands:
    atomicorbit -p single -n 2 -l 1 -m 0
    ```
 
-2. Visualize all orbitals for carbon:
+2. Visualize all orbitals for carbon in one plot:
    ```
    atomicorbit -a carbon -p all
    ```
 
-3. Visualize multiple orbitals for an atom with 29 electrons (copper):
+3. Visualize every orbital for an atom with 29 electrons (copper) seperatly:
    ```
    atomicorbit -e 29 -p multiple
    ```
