@@ -2,7 +2,7 @@
 
 AtomicOrbit is a powerful Python tool for visualizing electron orbitals in atoms based on their quantum numbers. It provides both 3D interactive plots and a command-line interface for easy use.
 
-![AtomicOrbit Logo](https://github.com/Fluffy-tofu/AtomicOrbit/blob/main/images/logo_atomicobrit_bigger.png)
+![AtomicOrbit Logo](https://github.com/Fluffy-tofu/AtomicOrbit/blob/main/images/logo_atomicorbit_bigger.png)
 
 ## Features
 
