@@ -245,26 +245,33 @@ def plot_multiple_orbitals_single_plot(electron_count, grid_size=60):
 
 
 def create_orbital_data(n_values, l_values, m_values, type_plot):
+    """
+    Simplified and fast orbital data generation.
+    """
     orbital_data = []
     titles = []
+
+    if type_plot == "single":
+        points_r = 300
+        points_theta = 300
+        points_phi = 600
+    else:
+        points_r = 150
+        points_theta = 150
+        points_phi = 300
+
     if type_plot != "single":
         highest_n = max(n_values)
     else:
         highest_n = n_values
 
-    if highest_n < 4:
-        stop = 1e-9
-    elif highest_n == 4:
-        stop = 1.55e-9
-    else:
-        stop = 1.7e-9
+    stop = highest_n * 1e-9
 
     if type_plot == "multiple" or type_plot == "all":
         for n, l, m in tqdm(zip(n_values, l_values, m_values), total=len(n_values), desc="Calculating orbitals"):
-
-            r = np.linspace(0, stop, 150)
-            theta = np.linspace(0, np.pi, 150)
-            phi = np.linspace(0, 2 * np.pi, 300)
+            r = np.linspace(0, stop, points_r)
+            theta = np.linspace(0, np.pi, points_theta)
+            phi = np.linspace(0, 2 * np.pi, points_phi)
 
             r, theta, phi = np.meshgrid(r, theta, phi)
 
@@ -276,21 +283,21 @@ def create_orbital_data(n_values, l_values, m_values, type_plot):
 
             orbital_data.append((x, y, z, prob_d))
             titles.append(f"Orbital (n={n}, l={l}, m={m})")
+
         return orbital_data, titles
 
-    elif type_plot == "single":
-        print("Creating Coordinate System...")
-        r = np.linspace(0, stop, 250)
-        theta = np.linspace(0, np.pi, 250)
-        phi = np.linspace(0, 2 * np.pi, 500)
+    else:
+        r = np.linspace(0, stop, points_r)
+        theta = np.linspace(0, np.pi, points_theta)
+        phi = np.linspace(0, 2 * np.pi, points_phi)
+
         r, theta, phi = np.meshgrid(r, theta, phi)
 
-        # Konvertierung zu kartesischen Koordinaten
         x = r * np.sin(theta) * np.cos(phi)
         y = r * np.sin(theta) * np.sin(phi)
         z = r * np.cos(theta)
-        return x, y, z, phi, theta, r
 
+        return x, y, z, phi, theta, r
 
 
 def darker_blue_orbital_scheme(n, l, m, max_n):

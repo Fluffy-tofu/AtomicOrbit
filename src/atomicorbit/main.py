@@ -138,7 +138,7 @@ def validate_args(args):
 
 def get_electron_count(args):
     if args.electrons is not None:
-        if args.electrons < 1 or args.electrons > 60:
+        if args.electrons < 1:
             raise ValueError("Invalid number of electrons. Please enter a number between 1 and 60.")
         return args.electrons
     elif args.atom:
