@@ -72,7 +72,7 @@ The implemented atomic orbital wave function $\Psi_{nlm}$ consists of:
 ```
 with radial part
 ```math
-yR_{nl}(r) = \sqrt{\left(\frac{2Z}{na_0}\right)^3\frac{(n-l-1)!}{2n(n+l)!}}\left(\frac{2Zr}{na_0}\right)^l e^{-\frac{Zr}{na_0}}L_{n-l-1}^{2l+1}\left(\frac{2Zr}{na_0}\right)
+R_{nl}(r) = \sqrt{\left(\frac{2Z}{na_0}\right)^3\frac{(n-l-1)!}{2n(n+l)!}}\left(\frac{2Zr}{na_0}\right)^l e^{-\frac{Zr}{na_0}}L_{n-l-1}^{2l+1}\left(\frac{2Zr}{na_0}\right)
 ```
 and spherical harmonics
 ```math
