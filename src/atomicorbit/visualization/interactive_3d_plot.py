@@ -5,12 +5,16 @@ from tqdm import tqdm
 import math
 import colorsys
 from plotly.subplots import make_subplots
-from atomicorbit.orbital_maths.generell_functions.radial_part_wavefunc import R_nl
-from atomicorbit.orbital_maths.generell_functions.spherical_harmonic_func import Y_lm
+try:
+    from atomicorbit.orbital_maths.generell_functions.radial_part_wavefunc import R_nl
+    from atomicorbit.orbital_maths.generell_functions.spherical_harmonic_func import Y_lm
+except:
+    from src.atomicorbit.orbital_maths.generell_functions.radial_part_wavefunc import R_nl
+    from src.atomicorbit.orbital_maths.generell_functions.spherical_harmonic_func import Y_lm
 
 
 def orbital_wavefunction(n, l, m, r, theta, phi):
-    """Calculates the wavefunction for a given orbital"""
+    """Wahrscheinlichkeitsdichte von einem Orbital berechnen"""
     R = R_nl(n=n, l=l, r=r)
     Y = Y_lm(m=m, l=l, phi=phi, theta=theta)
     return (R * Y) ** 2
@@ -31,7 +35,6 @@ def plot_orbital_3d(n, l, m, title, threshold=0.03, grid_size=60):
         indices = np.random.choice(len(x), 10000, replace=False)
         x, y, z, norm_prob = x[indices], y[indices], z[indices], norm_prob[indices]
 
-    # Create a regular 3D grid
     xi = np.linspace(x.min(), x.max(), grid_size)
     yi = np.linspace(y.min(), y.max(), grid_size)
     zi = np.linspace(z.min(), z.max(), grid_size)
@@ -43,7 +46,7 @@ def plot_orbital_3d(n, l, m, title, threshold=0.03, grid_size=60):
 
     fig = go.Figure()
     print("Staring the plot of the Orbital...")
-    # Isosurface
+
     fig.add_trace(go.Isosurface(
         x=X.flatten(),
         y=Y.flatten(),
@@ -244,9 +247,9 @@ def plot_multiple_orbitals_single_plot(electron_count, grid_size=60):
     return fig
 
 
-def create_orbital_data(n_values, l_values, m_values, type_plot):
+def create_orbital_data(n_values=[], l_values=[], m_values=[], type_plot="single"):
     """
-    Simplified and fast orbital data generation.
+    Orbital daten generationsfunktion
     """
     orbital_data = []
     titles = []
@@ -256,16 +259,21 @@ def create_orbital_data(n_values, l_values, m_values, type_plot):
         points_theta = 300
         points_phi = 600
     else:
-        points_r = 150
-        points_theta = 150
-        points_phi = 300
+        points_r = 50
+        points_theta = 50
+        points_phi = 100
 
     if type_plot != "single":
         highest_n = max(n_values)
     else:
         highest_n = n_values
 
-    stop = highest_n * 1e-9
+    if highest_n < 4:
+        stop = 1.0e-9
+    elif highest_n == 4:
+        stop = 1.2e-9
+    else:
+        stop = highest_n * 1e-9
 
     if type_plot == "multiple" or type_plot == "all":
         for n, l, m in tqdm(zip(n_values, l_values, m_values), total=len(n_values), desc="Calculating orbitals"):
@@ -301,7 +309,7 @@ def create_orbital_data(n_values, l_values, m_values, type_plot):
 
 
 def darker_blue_orbital_scheme(n, l, m, max_n):
-    base_hue = 0.6  # blue
+    base_hue = 0.6  # blau
 
     saturation = 0.8 - (n / (max_n * 2))
     saturation = max(0.3, saturation)
@@ -331,11 +339,10 @@ def calculate_quantum_numbers(electron_count):
             for m in range(-l, l+1):
                 for s in [-0.5, 0.5]:
                     if electrons_left > 0:
-                        if s == -0.5 or electrons_left == 1:
-                            n_list.append(n)
-                            l_list.append(l)
-                            m_list.append(m)
-                            s_list.append(s)
+                        n_list.append(n)
+                        l_list.append(l)
+                        m_list.append(m)
+                        s_list.append(s)
                         electrons_left -= 1
                     else:
                         break

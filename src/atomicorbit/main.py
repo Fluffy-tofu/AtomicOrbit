@@ -10,8 +10,12 @@ Version: 1.1.0
 
 import argparse
 import sys
-from atomicorbit.visualization.interactive_3d_plot import plot_orbital_3d, plot_multiple_orbitals, \
-    plot_multiple_orbitals_single_plot
+try:
+    from atomicorbit.visualization.interactive_3d_plot import plot_orbital_3d, plot_multiple_orbitals, \
+        plot_multiple_orbitals_single_plot
+except:
+    from src.atomicorbit.visualization.interactive_3d_plot import plot_orbital_3d, plot_multiple_orbitals, \
+        plot_multiple_orbitals_single_plot
 import os
 
 # ASCII Logo
@@ -25,7 +29,6 @@ LOGO = r"""
                                                                                                               
 """
 
-# Element to atomic number mapping
 ELEMENTS = {
     "hydrogen": 1, "H": 1,
     "helium": 2, "He": 2,

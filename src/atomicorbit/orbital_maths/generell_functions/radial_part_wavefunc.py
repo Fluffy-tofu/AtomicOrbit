@@ -1,5 +1,8 @@
 import numpy as np
-from atomicorbit.orbital_maths.generell_functions.normalizsation_factor import normalization_factor
+try:
+    from atomicorbit.orbital_maths.generell_functions.normalizsation_factor import normalization_factor
+except:
+    from src.atomicorbit.orbital_maths.generell_functions.normalizsation_factor import normalization_factor
 
 # Constants
 a0 = 0.529177210903e-10  # Bohr radius in meters
@@ -13,9 +16,9 @@ def generalized_laguerre(n, l, x):
         return 1
 
     if l == 0:
-        Lm1 = 0  # L_{-1}
-        L0 = 1  # L_0
-        L1 = 1 - x  # L_1
+        Lm1 = 0
+        L0 = 1
+        L1 = 1 - x
 
         if n - l - 1 <= 1:
             return L1 if n - l - 1 == 1 else L0
@@ -65,7 +68,6 @@ def R_nl(n, l, r, Z=1):
     rho = (2 * Z * r) / (n * a0)
     N = normalization_factor(n, l, Z)
 
-    # Calculate the associated Laguerre polynomial
     L = generalized_laguerre(n, l, rho)
 
     return N * (rho ** l) * np.exp(-rho / 2) * L
