@@ -6,6 +6,7 @@ from src.atomicorbit.visualization_vispy.atom_orbital import GeneralFunctions
 
 class SingleOrbital(GeneralFunctions):
     def __init__(self, visual_dict):
+        super().__init__(visual_dict)
         self.canvas = scene.SceneCanvas(keys='interactive', size=(2000, 1200), show=True)
         self.view = self.canvas.central_widget.add_view()
         self.view.camera = 'turntable'
@@ -182,7 +183,7 @@ def main():
         "prob_threshold": 0.1,
         "num_points": 1000000,
         "magnetic_field_comparison": False,
-        "show_difference_wavefunctions": False,
+        "show_difference_wavefunctions": True,
     }
     n = int(input("n: "))
     l = int(input("l: "))

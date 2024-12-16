@@ -11,15 +11,21 @@ import scipy.linalg as la
 from src.atomicorbit.orbital_maths.generell_functions.spherical_harmonic_func import Y_lm
 from src.atomicorbit.orbital_maths.generell_functions.radial_part_wavefunc import R_nl
 import seaborn as sns
+from scipy.constants import e, hbar, m_e
 
 
-boht_magneton = 5.788e-7 # eV/Tesla
+mu_B = 5.788e-7 # eV/Tesla
 feinstrukturkonstante = 1/137
 
 
 class GeneralFunctions:
     def __init__(self, visual_dict):
         self.visual_dict = visual_dict
+        # Physikalische Konstanten
+        self.e = e  # Elementarladung
+        self.hbar = hbar  # Reduziertes Plancksches Wirkungsquantum
+        self.m_e = m_e  # Elektronenmasse
+        self.mu_B = mu_B  # Bohrsches Magneton
 
     def calculate_orbital_points(self, n, l, m, Z, electron_count, threshold=0.1, num_points=100000, magnetic_field=0):
         """
@@ -173,31 +179,54 @@ class GeneralFunctions:
         return sommerfeld_formular
 
     def calculate_orbitals_energy_magneticfield(self, n, m_l, b_field, Z):
+        """Erweiterte Version mit diamagnetischem Term"""
         base_energy = self.calculate_orbitals_energy(n, Z)
-        zeeman_energy = boht_magneton * b_field * m_l
-        return base_energy + zeeman_energy
+
+        # Zeeman Term (orbital)
+        zeeman_energy = self.mu_B * b_field * m_l
+
+        # Diamagnetischer Term
+        # Erwartungswert von r² für Wasserstoff
+        r2_expect = (n ** 2 * (5 * n ** 2 + 1)) * (0.529e-10) ** 2  # in m²
+        dia_energy = (self.e ** 2 * b_field ** 2 / (8 * self.m_e)) * r2_expect
+
+        return base_energy + zeeman_energy + dia_energy
 
     def scaling_factor_magnetic_field(self, E_new, E_base):
         return np.sqrt(abs(E_new)/abs(E_base))
 
     def probability_density_magnetic_field(self, n, l, r, Z, m, theta, phi, field):
-        E_base = self.calculate_orbitals_energy(n, Z)
-        E_new = self.calculate_orbitals_energy_magneticfield(n, m, field, Z)
-        scaling_function = self.scaling_factor_magnetic_field(E_base=E_base, E_new=E_new)
-
-        R_nl = self.radial_function(n, l, r / scaling_function, Z)
+        """Erweiterte Version mit Störungskorrektur"""
+        # Basis-Wellenfunktion berechnen
+        R_nl = self.radial_function(n, l, r, Z)
         Y_lm = self.spherical_harmonics(l, m, theta, phi)
+        psi_0 = R_nl * Y_lm
 
-        scaling_factor = 1 / (scaling_function) ** 3 / 2
+        # Kartesische Koordinaten für diamagnetischen Term
+        x = r * np.sin(theta) * np.cos(phi)
+        y = r * np.sin(theta) * np.sin(phi)
 
-        print("ATOM IN MAGNETIC FIELD")
-        print(scaling_factor)
-        density = np.abs(R_nl * Y_lm) ** 2
+        # Störungskorrektur
+        orbital_term = self.mu_B * field * m
+        dia_term = (self.e ** 2 * field ** 2 / (8 * self.m_e)) * (x ** 2 + y ** 2)
+        correction = orbital_term + dia_term
+
+        # Gestörte Wellenfunktion
+        psi = psi_0 * (1 + correction)
+        print("ATOM IN MAGNETFELD")
+        # Wahrscheinlichkeitsdichte
+        density = np.abs(psi) ** 2
+
+        # Normierung
+        if density.max() != 0:
+            density = density / density.max()
+
         return density
 
 
 class AtomicConfiguration:
     def __init__(self):
+        super().__init__()
         self.orbital_filling = {
             's': 2,
             'p': 6,
@@ -258,6 +287,7 @@ class AtomicConfiguration:
 
 class ElectronDensityVisualizer(GeneralFunctions):
     def __init__(self, visual_dict):
+        super().__init__(visual_dict)
         self.canvas = scene.SceneCanvas(keys='interactive', size=(2000, 1200), show=True)
         self.view = self.canvas.central_widget.add_view()
         self.view.camera = 'turntable'
@@ -629,7 +659,7 @@ def main():
     electrons = int(input("elektronenzahl: "))
     plot_example_rpd()
     plot_example_magnetic_rpd()
-    plot_energy_difference()
+    #plot_energy_difference()
 
     visual_dict = {
         "state": "translucent",

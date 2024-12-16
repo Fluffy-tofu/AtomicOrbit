@@ -30,7 +30,7 @@ class MoleculeOrbital(GeneralFunctions):
             wave_2 = self.wave_func(n=1, l=0, m=0, Z=1, theta=theta, phi=phi,
                                     r=np.sqrt(x2 ** 2 + y2 ** 2 + z2 ** 2))
 
-            wave = wave_2 - wave_1
+            wave = wave_2 + wave_1
             density = abs(wave) ** 2
             if density.max() != 0:
                 density /= density.max()
@@ -82,7 +82,7 @@ def main():
         "edges": False,
         "point_size": 1,
         "prob_threshold": 0.1,
-        "num_points": 5000000,
+        "num_points": 1000000,
         "magnetic_field_comparison": False,
         "show_difference_wavefunctions": False,
     }
