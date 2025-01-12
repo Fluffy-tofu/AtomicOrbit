@@ -15,51 +15,36 @@ class SingleOrbital(GeneralFunctions):
         self.axis = scene.XYZAxis(parent=self.view.scene)
         self.visual_dict = visual_dict
 
-    def calculate_single_orbital_points(self, n, l, m, Z, num_points=100000, threshold=0.1, magnetic_field=False):
+    def calculate_single_orbital_points(self, n, l, m, Z, field=0, num_points=100000,
+                                        threshold=0.1, magnetic_field=False):
         """
-        Parameter:
-        -----------
-        n: int
-            Hauptquantenzahl (Energieniveau)
-        l: int
-            Nebenquantenzahl (Orbitalform)
-        m: int
-            Magnetische Quantenzahl (Orbitalorientierung)
-        Z: int
-            Ordnungszahl (Kernladung)
-        num_points: int
-            Anzahl der zu generierenden Punkte zur Visualisierung
-        threshold: float
-            Mindestwert für die Wahrscheinlichkeitsdichte (0 bis 1)
-
-        returns:
-        --------
-        tuple: (x, y, z, dichte) Koordinaten und Dichtewerte zur Visualisierung
+        Improved point calculation with consistent array handling
         """
-
-
-        # kugel koordinaten-system erstellen
         r, theta, phi = self.generate_grid(n, Z, num_points)
 
         if not magnetic_field:
             density = self.probability_density(n, l, m, Z, r, theta, phi)
-
         else:
-            density = self.probability_density_magnetic_field(n, l, r, Z, m, theta, phi, field=10000000)
+            density = self.probability_density_magnetic_field(n, l, r, Z, m, theta, phi, field)
 
-        # Normalisieren
-        density = density / np.max(density)
+        # Normalize density
+        max_density = np.max(density)
+        if max_density > 0:
+            density = density / max_density
 
-        # density = density + np.max(density) * 0.01 offset das nicht null ist
-
-        density = np.nan_to_num(density, nan=0.1, posinf=1.0, neginf=0.0)
-        density = np.clip(density, 0.01, 1)
-
+        # Create mask and apply it consistently
         mask = density >= threshold
 
+        # Convert to cartesian coordinates
         x, y, z = self.convert_cartesian(r, theta, phi)
 
-        return x[mask], y[mask], z[mask], density[mask]
+        # Apply mask to all arrays simultaneously
+        x = x[mask]
+        y = y[mask]
+        z = z[mask]
+        density = density[mask]
+
+        return x, y, z, density
 
     def calculate_optimal_Z(self, n, l, m):
         """ Berechnung von Z bei einzel Orbitalen """
@@ -91,33 +76,62 @@ class SingleOrbital(GeneralFunctions):
 
     def add_orbitals_single(self, n, l, m, Z, points_plotted, magnetic_field=False,
                             difference_wavefunctions=False):
+        """
+        Synchronized version of add_orbitals_single that ensures color and point arrays match exactly
+        """
+        # Calculate base orbital points
         x, y, z, density = self.calculate_single_orbital_points(n, l, m, Z,
                                                                 threshold=self.visual_dict["prob_threshold"],
                                                                 num_points=self.visual_dict["num_points"])
 
         if magnetic_field or difference_wavefunctions:
-            x, y, z, density_magnetic_field = self.calculate_single_orbital_points(n, l, m, Z,
-                                                                          threshold=self.visual_dict["prob_threshold"],
-                                                                          num_points=self.visual_dict["num_points"],
-                                                                          magnetic_field=True)
+            x_mag, y_mag, z_mag, density_magnetic_field = self.calculate_single_orbital_points(
+                n, l, m, Z,
+                field=self.visual_dict["magnectic_field"],
+                threshold=self.visual_dict["prob_threshold"],
+                num_points=self.visual_dict["num_points"],
+                magnetic_field=True
+            )
 
-        if difference_wavefunctions:
-            try:
-                density = density - density_magnetic_field
-            except ValueError:
-                density = density[:len(density_magnetic_field)]
+            # Create unified mask for both datasets
+            if difference_wavefunctions:
+                min_size = min(len(x), len(x_mag))
+                if min_size == 0:
+                    return points_plotted
 
+                # Truncate arrays to same size
+                x = x[:min_size]
+                y = y[:min_size]
+                z = z[:min_size]
+                density = density[:min_size]
+                density_magnetic_field = density_magnetic_field[:min_size]
                 density = density - density_magnetic_field
 
         points_plotted += len(x)
-        if len(x) > 0:
-            if magnetic_field and not difference_wavefunctions:
-                colors = self.get_density_color_magnetic_field(density_magnetic_field)
-            elif difference_wavefunctions:
-                colors = np.column_stack((1.0, 0.9, 0.0, 0.2))
 
+        if len(x) > 0:
+            # Generate colors using the exact same density array used for points
+            if magnetic_field and not difference_wavefunctions:
+                colors = np.zeros((len(x), 4))
+                for i in range(len(x)):
+                    red = np.clip(2 - density[i] * 2, 0, 1)
+                    blue = np.clip(density[i] * 2, 0, 1)
+                    green = np.clip(1 - np.abs(density[i] - 0.5) * 2, 0, 1)
+                    alpha = np.clip(density[i] * 0.8 + 0.2, 0, 1)
+                    colors[i] = [red, green, blue, alpha]
+            elif difference_wavefunctions:
+                colors = np.ones((len(x), 4))
+                colors[:, 1] = 0.9
+                colors[:, 2] = 0
+                colors[:, 3] = 0.2
             else:
-                colors = self.get_density_color(density)
+                colors = np.zeros((len(x), 4))
+                for i in range(len(x)):
+                    red = np.clip(density[i] * 2, 0, 1)
+                    blue = np.clip(2 - density[i] * 2, 0, 1)
+                    green = np.clip(1 - np.abs(density[i] - 0.5) * 2, 0, 1)
+                    alpha = np.clip(density[i] * 0.8 + 0.2, 0, 1)
+                    colors[i] = [red, green, blue, alpha]
 
             state = self.visual_dict["state"]
             not_see_inside = self.visual_dict["not_see_inside"]
@@ -125,17 +139,33 @@ class SingleOrbital(GeneralFunctions):
             edges = self.visual_dict["edges"]
             point_size = self.visual_dict["point_size"]
 
-            point_size = 10 * density + 3 if point_size == "dynamic" else point_size
+            if point_size == "dynamic":
+                point_size = 10 * density + 3
+
             edge_color = None if edges else colors
+
+            # Verify array lengths match before creating scatter plot
+            if len(colors) != len(x):
+                print(f"Warning: Color array length {len(colors)} doesn't match point array length {len(x)}")
+                # Ensure arrays match by truncating to shorter length
+                min_len = min(len(colors), len(x))
+                colors = colors[:min_len]
+                x = x[:min_len]
+                y = y[:min_len]
+                z = z[:min_len]
+
             scatter = scene.visuals.Markers()
             scatter.set_gl_state(state, depth_test=not_see_inside, blend=blend)
+
+            points = np.column_stack((x, y, z))
             scatter.set_data(
-                np.column_stack((x, y, z)),
+                points,
                 edge_color=edge_color,
                 face_color=colors,
                 size=point_size
             )
             self.view.add(scatter)
+
         return points_plotted
 
 
@@ -182,8 +212,10 @@ def main():
         "point_size": 1,
         "prob_threshold": 0.1,
         "num_points": 1000000,
-        "magnetic_field_comparison": False,
-        "show_difference_wavefunctions": True,
+        "magnectic_field": 1000000000000000,
+        "magnetic_field_comparison": True,
+        "show_difference_wavefunctions": False,
+        "Störtheorie Näherung": True
     }
     n = int(input("n: "))
     l = int(input("l: "))

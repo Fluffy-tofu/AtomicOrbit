@@ -5,6 +5,7 @@ import numpy as np
 
 class MoleculeOrbital(GeneralFunctions):
     def __init__(self, visual_dict):
+        super().__init__(visual_dict)
         self.canvas = scene.SceneCanvas(keys='interactive', size=(2000, 1200), show=True)
         self.view = self.canvas.central_widget.add_view()
         self.view.camera = 'turntable'
@@ -13,7 +14,7 @@ class MoleculeOrbital(GeneralFunctions):
         self.axis = scene.XYZAxis(parent=self.view.scene)
         self.visual_dict = visual_dict
 
-    def diatomic_molecule(self, angstroms, atom, num_points=100000, threshold=0.1):
+    def diatomic_molecule(self, angstroms, atom, field, num_points=100000, threshold=0.1):
         r, theta, phi = self.generate_grid(1, 1, num_points)
         x1, y1, z1 = self.convert_cartesian(r, theta, phi)
         distance = angstroms
@@ -24,11 +25,17 @@ class MoleculeOrbital(GeneralFunctions):
 
             x2, y2, z2 = self.convert_cartesian(r, theta, phi)
             #y2 += distance
+            if not self.visual_dict["magnetic_field_comparison"]:
+                wave_1 = self.wave_func(n=1, l=0, m=0, Z=1, theta=theta, phi=phi,
+                                        r=np.sqrt(x1 ** 2 + y1 ** 2 + z1 ** 2))
+                wave_2 = self.wave_func(n=1, l=0, m=0, Z=1, theta=theta, phi=phi,
+                                        r=np.sqrt(x2 ** 2 + y2 ** 2 + z2 ** 2))
 
-            wave_1 = self.wave_func(n=1, l=0, m=0, Z=1, theta=theta, phi=phi,
-                                    r=np.sqrt(x1 ** 2 + y1 ** 2 + z1 ** 2))
-            wave_2 = self.wave_func(n=1, l=0, m=0, Z=1, theta=theta, phi=phi,
-                                    r=np.sqrt(x2 ** 2 + y2 ** 2 + z2 ** 2))
+            else:
+                wave_1 = self.wave_func_magneticfield(n=1, l=0, m=0, Z=1, theta=theta, phi=phi,
+                                        r=np.sqrt(x1 ** 2 + y1 ** 2 + z1 ** 2), field=field)
+                wave_2 = self.wave_func_magneticfield(n=1, l=0, m=0, Z=1, theta=theta, phi=phi,
+                                        r=np.sqrt(x2 ** 2 + y2 ** 2 + z2 ** 2), field=field)
 
             wave = wave_2 + wave_1
             density = abs(wave) ** 2
@@ -40,17 +47,35 @@ class MoleculeOrbital(GeneralFunctions):
 
             return (x, y, z, density)
 
-    def add_orbital(self, atom, angstroms):
+    def add_orbital(self, atom, angstroms, difference_wavefunctions):
         """Visualize molecular orbital."""
         orbital = self.diatomic_molecule(angstroms, atom,
                                          num_points=self.visual_dict["num_points"],
-                                         threshold=self.visual_dict["prob_threshold"])
+                                         threshold=self.visual_dict["prob_threshold"],
+                                         field=0,)
         x, y, z, density = orbital
+        if difference_wavefunctions:
+            orbital = self.diatomic_molecule(angstroms, atom,
+                                             num_points=self.visual_dict["num_points"],
+                                             threshold=self.visual_dict["prob_threshold"],
+                                             field=self.visual_dict["magnectic_field"])
+            x, y, z, density_2 = orbital
+
+        if difference_wavefunctions:
+            try:
+                density = density - density_2
+            except ValueError:
+                min_length = min(len(density), len(density_2))
+                density = density[:min_length] - density_2[:min_length]
+
 
         print("Points after thresholding:", len(x))
 
         if len(x) > 0:
-            colors = self.get_density_color(density)
+            if difference_wavefunctions:
+                colors = self.get_density_color_magnetic_field(density_2)
+            else:
+                colors = self.get_density_color(density)
 
             state = self.visual_dict["state"]
             not_see_inside = self.visual_dict["not_see_inside"]
@@ -71,7 +96,7 @@ class MoleculeOrbital(GeneralFunctions):
             self.view.add(scatter)
 
     def visualize_atom(self, atom, angstroms):
-        self.add_orbital(atom, angstroms)
+        self.add_orbital(atom, angstroms, difference_wavefunctions=self.visual_dict["show_difference_wavefunctions"])
 
 
 def main():
@@ -83,8 +108,9 @@ def main():
         "point_size": 1,
         "prob_threshold": 0.1,
         "num_points": 1000000,
-        "magnetic_field_comparison": False,
-        "show_difference_wavefunctions": False,
+        "magnectic_field": -1000000,
+        "magnetic_field_comparison": True,
+        "show_difference_wavefunctions": True,
     }
     visualizer = MoleculeOrbital(visual_dict=visual_dict)
     visualizer.visualize_atom("hydrogen", 0.74)
