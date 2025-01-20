@@ -1225,6 +1225,7 @@ class MagneticEnergyDifferencePlotter(GeneralFunctions):
 
         plt.tight_layout()
 
+
         plt.show()
 
 
