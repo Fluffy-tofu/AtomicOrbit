@@ -57,10 +57,8 @@ class GeneralFunctions:
         else:
             density = self.probability_density(n, l, m, Z, r, theta, phi)
 
-        # Normalize to electron count
         density *= electron_count / (2.0 * np.sum(density) / num_points)
 
-        # Add small offset and normalize
         #density = density + np.max(density) * 0.01
         max_density = np.max(density)
         if max_density > 1e-10:
@@ -68,11 +66,10 @@ class GeneralFunctions:
         else:
             density = np.ones_like(density) * 0.1
 
-        # Safety checks
         density = np.nan_to_num(density, nan=0.1, posinf=1.0, neginf=0.0)
         #density = np.clip(density, 0.01, 1)
 
-        # Apply threshold filter
+        # Apply threshold
         mask = (density >= threshold) & (np.random.random(num_points) < (density * 0.5 + 0.1))
 
         x, y, z = self.convert_cartesian(r, theta, phi)
@@ -192,7 +189,6 @@ class GeneralFunctions:
         zeeman_energy = self.mu_B * b_field * m_l
 
         # Diamagnetischer Term
-        # Erwartungswert von r² für Wasserstoff
         r2_expect = (n ** 2 * (5 * n ** 2 + 1)) * (0.529e-10) ** 2  # in m²
         dia_energy = (self.e ** 2 * b_field ** 2 / (8 * self.m_e)) * r2_expect
 
@@ -201,7 +197,7 @@ class GeneralFunctions:
     def scaling_factor_magnetic_field(self, E_new, E_base):
         return np.sqrt(abs(E_new)/abs(E_base))
 
-    def first_order_apporoximation(self, n, l, r, Z, m, theta, phi, field):
+    def first_order_apporoximation_old(self, n, l, r, Z, m, theta, phi, field):
         """Erweiterte Version mit Störungskorrektur"""
         # Basis-Wellenfunktion berechnen
         R_nl = self.radial_function(n, l, r, Z)
@@ -223,25 +219,101 @@ class GeneralFunctions:
         psi = psi_0 * (1 + correction)
         return psi
 
+    def first_order_apporoximation(self, n, l, r, Z, m, theta, phi, field):
+        """
+        Vereinfachte Näherung für den Zeeman-Effekt mit Normierung.
+
+        Parameters:
+        -----------
+        n, l, m : int
+            Quantenzahlen
+        r, theta, phi : array
+            Kugelkoordinaten
+        Z : int
+            Kernladungszahl
+        field : float
+            Magnetfeldstärke
+        """
+        # Berechne ungestörte Wellenfunktion
+        R_nl = self.radial_function(n, l, r, Z)
+        Y_lm = self.spherical_harmonics(l, m, theta, phi)
+        psi_0 = R_nl * Y_lm
+
+        # Berechne Störterme
+        # Paramagnetischer Term
+        H_para = self.mu_B * field * m
+
+        # Diamagnetischer Term (In Kugelkoordinaten) (x² + y² = r²sin²(θ))
+        r_perp_squared = r * r * np.sin(theta) * np.sin(theta)
+        H_dia = (self.e ** 2 * field ** 2 / (8 * self.m_e)) * r_perp_squared
+
+        # Kombinierte gestörte Wellenfunktion (Zähler)
+        psi = psi_0 * (1 + H_para + H_dia)
+
+        # Normierung (Nenner)
+        # Volumenelement in Kugelkoordinaten
+        dV = r ** 2 * np.sin(theta)
+
+        # Berechne Normierungsfaktor
+        norm = np.sqrt(np.sum(np.abs(psi) ** 2 * dV))
+
+        # Normiere die Wellenfunktion
+        if norm > 0:
+            psi = psi / norm
+
+        return psi
+
+    def total_correction_up_to_second_order(self, n, l, m, B, r, theta, phi):
+        """
+        Berechnet die Wellenfunktion mit Korrekturen bis zur zweiten Ordnung
+        """
+        psi_0 = self.wave_func(n, l, m, 1, r, theta, phi)
+        psi_1 = self.first_order_correction(n, l, m, B, r, theta, phi) - psi_0  # Nur die Korrektur
+        psi_2 = self.second_order_correction(n, l, m, B, r, theta, phi) - psi_0  # Nur die Korrektur
+
+        # Kombiniere alle Beiträge
+        psi_total = psi_0 + psi_1 + psi_2
+
+        # Normierung
+        dV = r ** 2 * np.sin(theta)
+        norm = np.sqrt(np.sum(np.abs(psi_total) ** 2 * dV))
+        if norm > 0:
+            psi_total = psi_total / norm
+
+        return psi_total
+
+    def calculate_matrix_element(self, psi_k, psi_0, B, r, theta, phi, m):
+        # Zeeman Term mit m-Abhängigkeit
+        zeeman = self.mu_B * B * m * np.conjugate(psi_k) * psi_0
+
+        # Diamagnetischer Term
+        # x² + y² = r²sin²θ
+        x = r * np.sin(theta) * np.cos(phi)
+        y = r * np.sin(theta) * np.sin(phi)
+        r_perp_squared = x ** 2 + y ** 2
+
+        dia = (self.e ** 2 * B ** 2 / (8 * self.m_e)) * \
+              np.conjugate(psi_k) * r_perp_squared * psi_0
+
+        return zeeman + dia
+
     def first_order_correction(self, n, l, m, B, r, theta, phi):
         """
-        Improved first-order perturbation theory implementation
+        First-order perturbation theory implementation für 1D Arrays
         """
-        # Convert to atomic units
-        a0 = 5.29177e-11  # Bohr radius
+        a0 = 5.29177e-11
         B_atomic = B * (a0 ** 2 * self.e / self.hbar)
+        print(f"B_atomic: {B_atomic}")
 
-        # Unperturbed wavefunction
         psi_0 = self.wave_func(n, l, m, 1, r, theta, phi)
         E_n = self.calculate_orbitals_energy(n, 1)
 
-        # Initialize correction
         psi_1 = np.zeros_like(psi_0, dtype=complex)
 
-        # Volume element for integration
         dV = r ** 2 * np.sin(theta)
 
-        # Sum over intermediate states
+        contributions = []
+
         for n_prime in range(max(1, n - 2), n + 3):
             for l_prime in range(max(0, l - 1), min(n_prime, l + 2)):
                 for m_prime in range(-l_prime, l_prime + 1):
@@ -249,71 +321,114 @@ class GeneralFunctions:
                         continue
 
                     try:
-                        # Intermediate state
                         psi_k = self.wave_func(n_prime, l_prime, m_prime, 1, r, theta, phi)
                         E_k = self.calculate_orbitals_energy(n_prime, 1)
 
-                        # Matrix element with proper integration
-                        H_k0 = self.calculate_matrix_element(psi_k, psi_0, B_atomic, r, theta, phi)
+                        H_k0 = self.calculate_matrix_element(psi_k, psi_0, B_atomic, r, theta, phi, m)
                         integral = np.sum(H_k0 * dV)
 
-                        # Energy denominator
                         delta_E = E_k - E_n
                         if abs(delta_E) > 1e-10:
-                            psi_1 += (integral / delta_E) * psi_k
+                            contribution = (integral / delta_E) * psi_k
+                            psi_1 += contribution
+
+                            contributions.append({
+                                'state': (n_prime, l_prime, m_prime),
+                                'magnitude': np.abs(integral / delta_E)
+                            })
+
+                            print(f"\nContribution from state ({n_prime},{l_prime},{m_prime}):")
+                            print(f"Matrix element: {integral}")
+                            print(f"Energy difference: {delta_E}")
+                            print(f"Contribution magnitude: {np.abs(integral / delta_E)}")
 
                     except Exception as e:
+                        print(f"Exception for state ({n_prime},{l_prime},{m_prime}): {str(e)}")
                         continue
 
-        # Normalize the total wavefunction
+        if contributions:
+            print("\nLargest contributions:")
+            for contrib in sorted(contributions, key=lambda x: x['magnitude'], reverse=True)[:5]:
+                print(f"State {contrib['state']}: {contrib['magnitude']}")
+
         psi_total = psi_0 + psi_1
         norm = np.sqrt(np.sum(np.abs(psi_total) ** 2 * dV))
-
         if norm > 0:
             psi_total = psi_total / norm
+            print(f"\nFinal normalization factor: {norm}")
 
         return psi_total
 
-    def calculate_matrix_element(self, psi_k, psi_0, B, r, theta, phi):
-        """
-        Improved matrix element calculation including proper integration
-        """
-        # Zeeman term
-        Lz_psi_0 = -1j * self.hbar * np.gradient(psi_0, phi, axis=2)
-        zeeman = self.mu_B * B * np.conjugate(psi_k) * Lz_psi_0
 
-        # Diamagnetic term
-        x = r * np.sin(theta) * np.cos(phi)
-        y = r * np.sin(theta) * np.sin(phi)
-        dia = (self.e ** 2 * B ** 2 / (8 * self.m_e)) * np.conjugate(psi_k) * (x ** 2 + y ** 2) * psi_0
+    def check_normalization(self, n, l, r, Z, m, theta, phi, field):
+        """
+        Überprüft die Normierung der Wellenfunktion durch Integration
+        der Wahrscheinlichkeitsdichte über den gesamten Raum.
+        """
+        # Berechne Wellenfunktion
+        psi = self.first_order_approximation(n, l, r, Z, m, theta, phi, field)
 
-        return zeeman + dia
+        # Wahrscheinlichkeitsdichte
+        density = np.abs(psi) ** 2
+
+        # Volumenelement in Kugelkoordinaten
+        dV = r ** 2 * np.sin(theta)
+
+        # Berechne Integral über gesamten Raum
+        total_prob = np.sum(density * dV)
+
+        print(f"Gesamtwahrscheinlichkeit: {total_prob}")
+        print(f"Abweichung von 1: {abs(1 - total_prob)}")
+
+        return total_prob
 
     def wave_func_magneticfield(self, n, l, r, Z, m, theta, phi, field, approx):
         if approx:
             print("approx")
-            return self.first_order_apporoximation(n, l, r, Z, m, theta, phi, field)
+            # Unnormierte Version (alte Implementierung)
+            psi_old = self.first_order_apporoximation_old(n, l, r, Z, m, theta, phi, field)
+            density_old = np.abs(psi_old) ** 2
+
+            # Normierte Version (neue Implementierung)
+            psi_new = self.total_correction_up_to_second_order(n, l, r, Z, m, theta, phi, field)
+            density_new = np.abs(psi_new) ** 2
+
+            # Volumenelement
+            dV = r ** 2 * np.sin(theta)
+
+            # Integrale berechnen
+            total_old = np.sum(density_old * dV)
+            total_new = np.sum(density_new * dV)
+
+            print("Vergleich der Normierung:")
+            print(f"Alte Version - Gesamtwahrscheinlichkeit: {total_old}")
+            print(f"Neue Version - Gesamtwahrscheinlichkeit: {total_new}")
+
+            # Maximale Werte
+            max_old = np.max(density_old)
+            max_new = np.max(density_new)
+
+            print(f"\nMaximale Dichte:")
+            print(f"Alte Version: {max_old}")
+            print(f"Neue Version: {max_new}")
+
+            return psi_new
+
         else:
             print("no approx")
             psi_1 = self.first_order_correction(n, l, m, field, r, theta, phi)
             return psi_1
 
     def probability_density_magnetic_field(self, n, l, r, Z, m, theta, phi, field):
-        """
-        Improved probability density calculation for magnetic field effects
-        """
-        # Calculate wavefunction with perturbation
         psi = self.wave_func_magneticfield(n, l, r, Z, m, theta, phi, field,
                                            approx=self.visual_dict["Störtheorie Näherung"])
 
-        # Calculate density with proper normalization
         density = np.abs(psi) ** 2
 
-        # Volume element for proper normalization
         dV = r ** 2 * np.sin(theta)
         norm = np.sum(density * dV)
 
-        if norm > 1e-10:  # Avoid division by very small numbers
+        if norm > 1e-10:
             density = density / norm
 
         # Add small offset to prevent visualization artifacts
@@ -390,7 +505,7 @@ class ElectronDensityVisualizer(GeneralFunctions):
         self.view = self.canvas.central_widget.add_view()
         self.view.camera = 'turntable'
         self.view.camera.fov = 60
-        self.view.camera.distance = 2
+        self.view.camera.distance = 3
         self.view.camera.elevation = visual_dict["angle"]
         self.axis = scene.XYZAxis(parent=self.view.scene,)
         self.atomic_config = AtomicConfiguration()
@@ -406,14 +521,11 @@ class ElectronDensityVisualizer(GeneralFunctions):
                                   font_size=20, parent=self.view.scene)
 
     def calculate_orbital_points(self, n, l, m, Z, electron_count, threshold=0.1, num_points=100000, magnetic_field=0):
-        """
-        Improved orbital calculation that preserves orbital structure
-        """
         if electron_count == 0:
             return np.array([]), np.array([]), np.array([]), np.array([])
 
-        # Generate coordinates with quantum number-dependent scaling
-        r_scale = n * (1 + 0.5 * l)  # Scale radial distribution based on n and l
+
+        r_scale = n * (1 + 0.5 * l)
         r, theta, phi = self.generate_grid(n, Z, num_points)
         r = r * r_scale
 
@@ -422,15 +534,12 @@ class ElectronDensityVisualizer(GeneralFunctions):
         else:
             density = self.probability_density(n, l, m, Z, r, theta, phi)
 
-        # Scale density by electron count while preserving orbital structure
         density *= electron_count
         density = density / np.max(density) if np.max(density) > 0 else density
 
-        # Apply angular momentum dependent threshold
         l_dependent_threshold = threshold * (1 - 0.1 * l)  # Lower threshold for higher angular momentum
         mask = density >= l_dependent_threshold
 
-        # Add random sampling to prevent overcrowding
         random_mask = np.random.random(len(density[mask])) < (1.0 / (1 + 0.1 * electron_count))
 
         x, y, z = self.convert_cartesian(r, theta, phi)
@@ -447,7 +556,6 @@ class ElectronDensityVisualizer(GeneralFunctions):
         points_plotted = 0
         configuration = self.atomic_config.get_configuration(atomic_number)
 
-        # Store orbitals for layered visualization
         orbital_data = []
 
         for orbital, m_dict in configuration.items():
@@ -470,7 +578,6 @@ class ElectronDensityVisualizer(GeneralFunctions):
                     })
                     points_plotted += len(x)
 
-        # Visualize orbitals from innermost to outermost
         for data in sorted(orbital_data, key=lambda x: (x['n'], x['l'])):
             self.add_orbital_visualization(
                 data['x'], data['y'], data['z'],
@@ -482,16 +589,13 @@ class ElectronDensityVisualizer(GeneralFunctions):
             self.add_magnetic_field_lines()
 
     def add_orbital_visualization(self, x, y, z, density, n, l, m):
-        """
-        Enhanced visualization for individual orbitals
-        """
+
         colors = self.get_density_color(density)
 
         if self.visual_dict["point_size"] == "dynamic":
-            # Scale point size based on quantum numbers
             base_size = self.visual_dict["point_size"]
-            n_scale = 1 + 0.2 * (n - 1)  # Larger for higher n
-            l_scale = 1 - 0.1 * l  # Smaller for higher l
+            n_scale = 1 + 0.2 * (n - 1)
+            l_scale = 1 - 0.1 * l
             point_size = base_size * n_scale * l_scale
         else:
             point_size = self.visual_dict["point_size"]
@@ -541,6 +645,7 @@ class ElectronDensityVisualizer(GeneralFunctions):
                         arrow_type="stealth",
                         parent=self.view.scene
                     )
+
     def visualize_atom(self, atomic_number):
         points_plotted = 0
         configuration = self.atomic_config.get_configuration(atomic_number)
@@ -606,7 +711,6 @@ class ElectronDensityVisualizer(GeneralFunctions):
 
 class RadialProbabilityPlotter(GeneralFunctions):
     def __init__(self):
-        # Dummy visual_dict for parent class
         super().__init__(visual_dict={})
 
     def calculate_rpd(self, n, l, Z, r):
@@ -653,86 +757,372 @@ class MagneticRadialProbabilityPlotter(GeneralFunctions):
     def __init__(self):
         super().__init__(visual_dict={})
 
-    def calculate_rpd_magnetic(self, n, l, m, Z, r, theta, B_field):
+    def calculate_rpd_magnetic_directional(self, n, l, m, Z, r, theta, B_field):
         """
-        Berechnet die radiale Wahrscheinlichkeitsverteilung im Magnetfeld unter
-        Berücksichtigung der Störungstheorie erster Ordnung.
-
-        Parameters:
-        -----------
-        n, l, m : int
-            Quantenzahlen
-        Z : int
-            Kernladungszahl
-        r : array
-            Radiusvektor
-        B_field : float
-            Magnetfeldstärke in Tesla
-
-        Returns:
-        --------
-        rpd : array
-            Radiale Wahrscheinlichkeitsverteilung mit Magnetfeldkorrektur
+        Berechnet die richtungsabhängige radiale Wahrscheinlichkeitsverteilung im Magnetfeld
         """
-        # Basis-Radialfunktion
-        R_0 = self.radial_function(n, l, r, Z)
+        # Basis-Wellenfunktion
+        psi_0 = self.wave_func(n, l, m, Z, r, theta, np.zeros_like(theta))
 
-        # Störungsterm für das Magnetfeld
-        # Zeeman-Term (linear in B)
-        zeeman_correction = self.mu_B * B_field * m
+        # Paramagnetischer Term (nur in x-y-Ebene wirksam)
+        H_para = self.mu_B * B_field * m * np.sin(theta)
 
-        # Diamagnetischer Term (quadratisch in B)
-        # Hier müssen wir r² in Kugelkoordinaten ausdrücken
-        r_squared = r ** 2 * np.sin(theta) ** 2  # nur x-y Ebene für B || z
-        diamagnetic_correction = (self.e ** 2 * B_field ** 2 / (8 * self.m_e)) * r_squared
+        # Diamagnetischer Term (r_perp = r*sin(theta))
+        r_perp_squared = r ** 2 * np.sin(theta) ** 2
+        H_dia = (self.e ** 2 * B_field ** 2 / (8 * self.m_e)) * r_perp_squared
 
-        # Gesamte Störung
-        total_correction = zeeman_correction + diamagnetic_correction
+        # Gestörte Wellenfunktion mit richtungsabhängiger Korrektur
+        psi = psi_0 * (1 + H_para + H_dia)
 
-        # Korrigierte Radialfunktion (Störungstheorie 1. Ordnung)
-        R_corrected = R_0 * (1 + total_correction)
+        # Normierung
+        dV = r ** 2 * np.sin(theta)
+        norm = np.sqrt(np.sum(np.abs(psi) ** 2 * dV))
+        if norm > 0:
+            psi = psi / norm
 
         # Radiale Wahrscheinlichkeitsverteilung
-        rpd = r ** 2 * np.abs(R_corrected) ** 2
+        rpd = r ** 2 * np.abs(psi) ** 2
 
         return rpd
 
-    def plot_rpd_magnetic_comparison(self, n, l, m, Z, B_fields, r_max=10, num_points=100000):
+    def calculate_rpd_magnetic(self, n, l, m, Z, r, theta, B_field):
         """
-        Vergleicht die RPD für verschiedene Magnetfeldstärken mit störungstheoretischer Korrektur
+        Berechnet die radiale Wahrscheinlichkeitsverteilung im Magnetfeld
+        mit der verbesserten normierten Störungstheorie
+        """
+        # Basis-Wellenfunktion
+        psi_0 = self.wave_func(n, l, m, Z, r, theta, np.zeros_like(theta))
+
+        # Störterme
+        # Paramagnetischer Term
+        H_para = self.mu_B * B_field * m
+
+        # Diamagnetischer Term
+        r_perp_squared = r ** 2 * np.sin(theta) ** 2
+        H_dia = (self.e ** 2 * B_field ** 2 / (8 * self.m_e)) * r_perp_squared
+
+        # Gestörte Wellenfunktion
+        psi = psi_0 * (1 + H_para + H_dia)
+
+        # Normierung
+        dV = r ** 2 * np.sin(theta)
+        norm = np.sqrt(np.sum(np.abs(psi) ** 2 * dV))
+        if norm > 0:
+            psi = psi / norm
+
+        # Radiale Wahrscheinlichkeitsverteilung
+        rpd = r ** 2 * np.abs(psi) ** 2
+
+        return rpd
+
+    def calculate_rpd_magnetic_direction_full_first_order(self, n, l, m, Z, r, theta, B_field):
+        # Debug der Array-Shapes
+        print(f"Shape of r: {r.shape}")
+        print(f"Shape of theta: {theta.shape}")
+
+        # Erstellen der korrekten Meshgrids
+        r_mesh, theta_mesh = np.meshgrid(r, theta, indexing='ij')
+        print(f"Shape of r_mesh: {r_mesh.shape}")
+        print(f"Shape of theta_mesh: {theta_mesh.shape}")
+
+        phi = np.zeros_like(theta)  # Behalten ich bei
+
+        psi_corrected = self.first_order_correction(n, l, m, B_field, r, theta, phi)
+        psi_0 = self.wave_func(n, l, m, Z, r, theta, phi)
+
+        print(f"Shape of psi_corrected: {psi_corrected.shape}")
+
+        # Berechnung von dV mit korrektem Broadcasting
+        dV = r_mesh ** 2 * np.sin(theta_mesh)
+        print(f"Shape of dV: {dV.shape}")
+
+        # Vergleich mit korrektem Broadcasting
+        if np.allclose(psi_corrected, psi_0, atol=1e-8):
+            print("BITTE NICHT!!!!!! Die Wellenfunktionen sind (fast) identisch.")
+        else:
+            print("Danke! Die Wellenfunktionen sind unterschiedlich.")
+
+            # Normierung mit korrektem Broadcasting
+            norm_psi_corrected = np.sqrt(np.sum(np.abs(psi_corrected) ** 2 * dV))
+            norm_psi_0 = np.sqrt(np.sum(np.abs(psi_0) ** 2 * dV))
+
+            print(f"Norm von psi_corrected: {norm_psi_corrected}")
+            print(f"Norm von psi_0: {norm_psi_0}")
+
+            if not np.isclose(norm_psi_corrected, 1, atol=1e-8):
+                print("WARNUNG: psi_corrected ist nicht normiert!")
+            if not np.isclose(norm_psi_0, 1, atol=1e-8):
+                print("WARNUNG: psi_0 ist nicht normiert!")
+
+            difference = psi_corrected - psi_0
+            max_diff = np.max(np.abs(difference))
+            mean_diff = np.mean(np.abs(difference))
+            print(f"Maximaler Unterschied: {max_diff}")
+            print(f"Mittlerer Unterschied: {mean_diff}")
+
+            relative_diff = np.abs(difference / (psi_0 + 1e-10))
+            max_rel_diff = np.max(relative_diff)
+            print(f"Maximale relative Abweichung: {max_rel_diff}")
+
+        # RPD Berechnung mit korrektem Broadcasting
+        rpd = r_mesh ** 2 * np.abs(psi_corrected) ** 2
+
+        return rpd
+
+    def plot_first_order_wavefunction(self, n, l, m, Z, B_field, r_max=20, num_points=1000):
+        """
+        Eine separate Funktion zur Visualisierung der Wellenfunktion erster Ordnung
+        """
+        # Erstelle Gitter
+        r = np.linspace(0, r_max, num_points)
+        theta_xy = np.pi / 2 * np.ones_like(r)  # x-y Ebene
+        theta_z = np.zeros_like(r)  # z-Richtung
+        phi = np.zeros_like(r)
+
+        # Berechne ungestörte Wellenfunktionen
+        #psi_0_xy = self.wave_func(n, l, m, Z, r, theta_xy, phi)
+        #psi_0_z = self.wave_func(n, l, m, Z, r, theta_z, phi)
+        psi_0_xy = self.total_correction_up_to_second_order(n, l, m, 0, r, theta_xy, phi)
+        psi_0_z = self.total_correction_up_to_second_order(n, l, m, 0, r, theta_z, phi)
+
+
+        # Berechne gestörte Wellenfunktionen
+
+        #psi_B_xy = self.total_correction_up_to_second_order(n, l, m, B_field, r, theta_xy, phi)
+        #psi_B_z = self.total_correction_up_to_second_order(n, l, m, B_field, r, theta_z, phi)
+        psi_B_xy = self.first_order_correction(n, l, m, B_field, r, theta_xy, phi)
+        psi_B_z = self.first_order_correction(n, l, m, B_field, r, theta_z, phi)
+
+
+        # Berechne Wahrscheinlichkeitsdichten
+        density_0_xy = r ** 2 * np.abs(psi_0_xy) ** 2
+        density_B_xy = r ** 2 * np.abs(psi_B_xy) ** 2
+        density_0_z = r ** 2 * np.abs(psi_0_z) ** 2
+        density_B_z = r ** 2 * np.abs(psi_B_z) ** 2
+
+        # Normierung
+        max_density = max([np.max(density_0_xy), np.max(density_B_xy),
+                           np.max(density_0_z), np.max(density_B_z)])
+
+        density_0_xy /= max_density
+        density_B_xy /= max_density
+        density_0_z /= max_density
+        density_B_z /= max_density
+
+        # Erstelle Plot
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 6))
+
+        # Plot für x-y Ebene
+        ax1.plot(r, density_0_xy, 'b--', label='B = 0 T', linewidth=2)
+        ax1.plot(r, density_B_xy, 'r-', label=f'B = {B_field} T', linewidth=2)
+        ax1.set_title(f'x-y-Ebene (θ = π/2)\nn={n}, l={l}, m={m}')
+        ax1.set_xlabel('Radius (Bohr)')
+        ax1.set_ylabel('Normierte Wahrscheinlichkeitsdichte')
+        ax1.grid(True, alpha=0.3)
+        ax1.legend()
+
+        # Plot für z-Richtung
+        ax2.plot(r, density_0_z, 'b--', label='B = 0 T', linewidth=2)
+        ax2.plot(r, density_B_z, 'r-', label=f'B = {B_field} T', linewidth=2)
+        ax2.set_title(f'z-Richtung (θ = 0)\nn={n}, l={l}, m={m}')
+        ax2.set_xlabel('Radius (Bohr)')
+        ax2.grid(True, alpha=0.3)
+        ax2.legend()
+
+        # Debug-Ausgaben
+        print(f"Maximum Werte:")
+        print(f"xy-Ebene: B=0: {np.max(density_0_xy):.6f}, B={B_field}: {np.max(density_B_xy):.6f}")
+        print(f"z-Richtung: B=0: {np.max(density_0_z):.6f}, B={B_field}: {np.max(density_B_z):.6f}")
+        print(f"\nIntegrierte Wahrscheinlichkeiten:")
+        print(f"xy-Ebene: B=0: {np.trapz(density_0_xy, r):.6f}, B={B_field}: {np.trapz(density_B_xy, r):.6f}")
+        print(f"z-Richtung: B=0: {np.trapz(density_0_z, r):.6f}, B={B_field}: {np.trapz(density_B_z, r):.6f}")
+
+        # Setze vernünftige Grenzen
+        for ax in [ax1, ax2]:
+            ax.set_ylim(-0.05, 1.05)
+            ax.set_xlim(0, r_max)
+
+        plt.tight_layout()
+        plt.show()
+        return fig, (ax1, ax2)
+
+    def plot_rpd_magnetic_directional(self, n, l, m, Z, B_field, approx=True, r_max=10, num_points=1000):
+        """
+        Erstellt separate Plots für x-y-Ebene und z-Richtung
+        """
+        r = np.linspace(0, r_max, num_points)
+
+        # Winkel für x-y-Ebene (θ = π/2) und z-Richtung (θ = 0)
+        theta_xy = np.pi / 2 * np.ones_like(r)
+        theta_z = np.zeros_like(r)
+
+        # Berechne RPD mit existierender Methode
+        if approx:
+            rpd_0_xy = self.calculate_rpd_magnetic_directional(n, l, m, Z, r, theta_xy, 0)
+            rpd_B_xy = self.calculate_rpd_magnetic_directional(n, l, m, Z, r, theta_xy, B_field)
+            rpd_0_z = self.calculate_rpd_magnetic_directional(n, l, m, Z, r, theta_z, 0)
+            rpd_B_z = self.calculate_rpd_magnetic_directional(n, l, m, Z, r, theta_z, B_field)
+        else:
+            # Nutze die full-first-order Methode
+            rpd_0_xy = self.calculate_rpd_magnetic_direction_full_first_order(n, l, m, Z, r, theta_xy, 0)
+            rpd_B_xy = self.calculate_rpd_magnetic_direction_full_first_order(n, l, m, Z, r, theta_xy, B_field)
+            rpd_0_z = self.calculate_rpd_magnetic_direction_full_first_order(n, l, m, Z, r, theta_z, 0)
+            rpd_B_z = self.calculate_rpd_magnetic_direction_full_first_order(n, l, m, Z, r, theta_z, B_field)
+
+        # Debug-Ausgabe
+        print(f"RPD Shapes - xy: {rpd_0_xy.shape}, z: {rpd_0_z.shape}")
+        print(f"RPD Max Values - xy_0: {np.max(rpd_0_xy)}, xy_B: {np.max(rpd_B_xy)}")
+        print(f"RPD Max Values - z_0: {np.max(rpd_0_z)}, z_B: {np.max(rpd_B_z)}")
+
+        # Wenn die RPDs 2D sind, nehmen wir die relevante Dimension
+        if rpd_0_xy.ndim > 1:
+            rpd_0_xy = np.mean(rpd_0_xy, axis=1)  # oder axis=0, je nach Struktur
+            rpd_B_xy = np.mean(rpd_B_xy, axis=1)
+            rpd_0_z = np.mean(rpd_0_z, axis=1)
+            rpd_B_z = np.mean(rpd_B_z, axis=1)
+
+        # Normierung auf das Maximum aller Kurven
+        max_rpd = max([np.max(rpd_0_xy), np.max(rpd_B_xy),
+                       np.max(rpd_0_z), np.max(rpd_B_z)])
+
+        if max_rpd > 0:
+            rpd_0_xy = rpd_0_xy / max_rpd
+            rpd_B_xy = rpd_B_xy / max_rpd
+            rpd_0_z = rpd_0_z / max_rpd
+            rpd_B_z = rpd_B_z / max_rpd
+
+        # Erstelle Plot
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 6))
+
+        # Plot für x-y-Ebene
+        ax1.plot(r, rpd_0_xy, 'b--', label='B = 0 T', linewidth=2)
+        ax1.plot(r, rpd_B_xy, 'r-', label=f'B = {B_field} T', linewidth=2)
+        ax1.set_title(f'x-y-Ebene (θ = π/2)\nn={n}, l={l}, m={m}')
+        ax1.set_xlabel('Radius (Bohr)')
+        ax1.set_ylabel('Normierte Dichte')
+        ax1.grid(True, alpha=0.3)
+        ax1.legend()
+
+        # Plot für z-Richtung
+        ax2.plot(r, rpd_0_z, 'b--', label='B = 0 T', linewidth=2)
+        ax2.plot(r, rpd_B_z, 'r-', label=f'B = {B_field} T', linewidth=2)
+        ax2.set_title(f'z-Richtung (θ = 0)\nn={n}, l={l}, m={m}')
+        ax2.set_xlabel('Radius (Bohr)')
+        ax2.grid(True, alpha=0.3)
+        ax2.legend()
+
+        # Einheitliche Formatierung
+        for ax in [ax1, ax2]:
+            ax.set_ylim(-0.05, 1.05)
+            ax.set_xlim(0, r_max)
+
+        plt.tight_layout()
+        plt.show()
+        return fig, (ax1, ax2)
+
+    def plot_rpd_magnetic_comparison(self, n, l, m, Z, B_fields, r_max=50, num_points=5000):
+        """
+        Vergleicht die RPD für verschiedene Magnetfeldstärken
         """
         # Erzeuge r-Gitter und Winkelkoordinaten
         r = np.linspace(0, r_max, num_points)
-        theta = np.pi / 2  # Fixiere theta für B || z
+        print(r.max())
+        theta = np.pi / 2
 
-        plt.figure(figsize=(15, 10))
+        fig = plt.figure(figsize=(12, 8))
+        plt.rcParams['font.size'] = 12
+        plt.rcParams['axes.labelsize'] = 12
+        plt.rcParams['xtick.labelsize'] = 10
+        plt.rcParams['ytick.labelsize'] = 10
+        plt.rcParams['legend.fontsize'] = 10
+        plt.rcParams['figure.titlesize'] = 14
+        # Set style manually for better control
+        plt.rcParams['axes.grid'] = True
+        plt.rcParams['grid.alpha'] = 0.3
+        plt.rcParams['axes.facecolor'] = '#f0f0f0'
 
         # Berechne und plotte ungestörten Fall
         rpd_0 = self.calculate_rpd_magnetic(n, l, m, Z, r, theta, 0)
+
+
         max_rpd = np.max(rpd_0)  # Normierung auf B=0 Fall
-        plt.plot(r, rpd_0 / max_rpd, label='B = 0 T', linestyle='--', color='black')
+        plt.plot(r, rpd_0 / max_rpd, label='B = 0 T',
+                 linestyle='--', color='black', linewidth=2)
 
         # Berechne und plotte für verschiedene Feldstärken
         colors = plt.cm.viridis(np.linspace(0, 1, len(B_fields)))
         for B, color in zip(B_fields, colors):
             rpd = self.calculate_rpd_magnetic(n, l, m, Z, r, theta, B)
             rpd_norm = rpd / max_rpd
-            plt.plot(r, rpd_norm, label=f'B = {B} T', color=color)
+            plt.plot(r, rpd_norm, label=f'B = {B} T',
+                     color=color, linewidth=2)
 
-            # Berechne Energieverschiebung
+            # Energieverschiebung berechnen
             E_shift = self.calculate_orbitals_energy_magneticfield(n, m, B, Z) - \
                       self.calculate_orbitals_energy(n, Z)
             print(f"Energieverschiebung für B = {B}T: {E_shift:.6f} eV")
 
-        plt.title(f'Radiale Wahrscheinlichkeitsverteilung im Magnetfeld\n'
-                  f'(n={n}, l={l}, m={m}, Z={Z})')
-        plt.xlabel('r (Bohr)')
-        plt.ylabel('P(r) (normiert)')
+        plt.title(f'Radiale Wahrscheinlichkeitsverteilung im Magnetfeld\n' +
+                  f'(n={n}, l={l}, m={m}, Z={Z})',
+                  fontsize=14, pad=20)
+        plt.xlabel('Radius (Bohr)', fontsize=12)
+        plt.ylabel('Normierte Wahrscheinlichkeitsdichte', fontsize=12)
         plt.grid(True, alpha=0.3)
-        plt.legend()
+        plt.legend(fontsize=10, framealpha=0.9)
+
         plt.ylim(-0.05, 1.05)
 
+        max_relevant_r = r[np.where(rpd_0 > max_rpd * 0.01)[0][-1]]
+        plt.xlim(0, max_relevant_r * 1.2)
+
+        plt.tight_layout()
+
         plt.show()
+
+    def plot_comparison_series(self, n_values, l_values, m_values, Z, B_field, r_max=10):
+        """
+        Erstellt eine Serie von Vergleichsplots für verschiedene Quantenzahlen
+        """
+        num_plots = len(n_values)
+        rows = int(np.ceil(num_plots / 2))
+        cols = min(2, num_plots)
+
+        fig, axes = plt.subplots(rows, cols, figsize=(12, 6 * rows))
+        if num_plots == 1:
+            axes = np.array([axes])
+        axes = axes.flatten()
+
+        for i, (n, l, m) in enumerate(zip(n_values, l_values, m_values)):
+            if i < len(axes):
+                # Konfiguriere jeden Subplot
+                self._plot_single_comparison(n, l, m, Z, B_field, r_max, ax=axes[i])
+
+        for j in range(i + 1, len(axes)):
+            fig.delaxes(axes[j])
+
+        plt.tight_layout()
+        plt.show()
+
+    def _plot_single_comparison(self, n, l, m, Z, B_field, r_max, ax):
+        """
+        Hilfsfunktion für einzelnen Vergleichsplot
+        """
+        r = np.linspace(0, r_max, 1000)
+        theta = np.pi / 2
+
+        rpd_0 = self.calculate_rpd_magnetic(n, l, m, Z, r, theta, 0)
+        rpd_B = self.calculate_rpd_magnetic(n, l, m, Z, r, theta, B_field)
+
+        max_rpd = max(np.max(rpd_0), np.max(rpd_B))
+
+        ax.plot(r, rpd_0 / max_rpd, 'b--', label='B = 0 T')
+        ax.plot(r, rpd_B / max_rpd, 'r-', label=f'B = {B_field} T')
+
+        ax.set_title(f'n={n}, l={l}, m={m}')
+        ax.set_xlabel('Radius (Bohr)')
+        ax.set_ylabel('Normierte Dichte')
+        ax.grid(True, alpha=0.3)
+        ax.legend()
 
 
 class MagneticEnergyDifferencePlotter(GeneralFunctions):
@@ -783,8 +1173,6 @@ class MagneticEnergyDifferencePlotter(GeneralFunctions):
         text_offset = 0.35
         energy_text_offset = 0.8
 
-
-
         # Energieniveaus zeichnen
         sorted_items = sorted(energies_dict.items(), key=lambda x: x[1], reverse=True)
 
@@ -803,7 +1191,6 @@ class MagneticEnergyDifferencePlotter(GeneralFunctions):
             ax.text(text_offset, E, label,
                     verticalalignment='center', fontsize=12)
 
-            # Energiewert - weiter nach rechts verschoben und präziser formatiert
             ax.text(energy_text_offset, E,
                     f"${E:.6f}\,\mathrm{{eV}}$",
                     verticalalignment='center', fontsize=10, color='gray')
@@ -828,18 +1215,14 @@ class MagneticEnergyDifferencePlotter(GeneralFunctions):
         ax.set_xlim(-0.8, 1.4)
         ax.set_ylim(kern_position - y_padding / 2, max(energy_values) + y_padding / 2)
 
-        # Y-Achsen-Ticks anpassen
         ax.yaxis.set_major_formatter(plt.FormatStrFormatter('%.6f'))
 
-        # Titel
         ax.set_title(f"Energieniveaudiagramm: Zeeman-Effekt ($l={l}$)", pad=20)
 
-        # Zusätzliche Informationen
         fig.text(0.02, 0.02,
                  r"$\Delta E = \mu_B g_J B m_J$",
                  fontsize=10)
 
-        # Layout optimieren
         plt.tight_layout()
 
         plt.show()
@@ -847,19 +1230,19 @@ class MagneticEnergyDifferencePlotter(GeneralFunctions):
 
 def plot_example_magnetic_rpd():
     plotter = MagneticRadialProbabilityPlotter()
-    n, l, m = 2, 1, 1
-    # n, l, m = 2, 1, 0 --> BEI M=0 BLEIBT DAS ORBITALGLEICH DA MAGNETFELD ENTLANG Z ACHSE GEHT!!!!!
-    #n, l, m = 2, 1, -1
-    configs = [
-        (2, 1, 1),
-        (2, 1, 0),
-        (2, 1, -1),
-               ]
-    Z = 1
-    B_fields = [1_000, 10_000, 100_0000, 1_000_000, 10_000_000]
 
-    for config in configs:
-        plotter.plot_rpd_magnetic_comparison(config[0], config[1], config[2], Z, B_fields)
+    B_fields = [1000, 5000, 10000]
+    plotter.plot_rpd_magnetic_comparison(n=2, l=1, m=1, Z=1, B_fields=B_fields)
+
+    n_values = [1, 2, 2, 3]
+    l_values = [0, 0, 1, 1]
+    m_values = [0, 0, 1, 1]
+    plotter.plot_comparison_series(n_values, l_values, m_values, Z=1, B_field=300)
+
+    plotter.plot_rpd_magnetic_directional(n=2, l=0, m=0, Z=1, B_field=1010, approx=False, r_max=500, num_points=1000)
+
+    plotter.plot_first_order_wavefunction(n=2, l=0, m=0, Z=1, B_field=80000000)
+
 
 
 # Beispielnutzung
@@ -884,8 +1267,10 @@ def plot_energy_difference():
 def main():
     electrons = int(input("elektronenzahl: "))
     #plot_example_rpd()
-    #plot_example_magnetic_rpd()
+    plot_example_magnetic_rpd()
     #plot_energy_difference()
+
+    print("Und?")
 
     visual_dict = {
         "angle": 50,
@@ -895,15 +1280,14 @@ def main():
         "edges": False,
         "point_size": 1,
         "prob_threshold": 0.3,
-        "num_points": 600000,
-        "magnetic_field": 1000,
+        "num_points": 1030000,
+        "magnetic_field": 300000000000,
         "field_lines": False,
         "info": False,
         "Störtheorie Näherung": False
     }
     visualizer = ElectronDensityVisualizer(visual_dict=visual_dict)
     visualizer.visualize_atom(electrons)
-
 
 
     print("\nVisualisierung gestartet...")

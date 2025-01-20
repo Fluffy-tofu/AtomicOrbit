@@ -15,11 +15,10 @@ class OrbitalAnimator:
         self.visualizer_class = visualizer_class
         self.visual_dict = visual_dict.copy()
 
-        # Animation parameters
         self.frame_count = 0
         self.total_frames = 0
         self.B_fields = None
-        self.camera_angle = None
+        self.camera_angle = 30
         self.pbar = None
         self.first_frame = True
 
@@ -30,13 +29,10 @@ class OrbitalAnimator:
         self.total_frames = num_frames
         self.frame_count = 0
 
-        # Initialize progress bar
         self.pbar = tqdm(total=num_frames, desc="Generating frames")
 
-        # Create visualizer
         self.visualizer = self.visualizer_class(visual_dict=self.visual_dict)
 
-        # Set up timer for frame capture
         self.timer = app.Timer(interval=0.1, connect=self.update, start=True)
 
     def update(self, event):
@@ -49,18 +45,14 @@ class OrbitalAnimator:
             app.quit()
             return
 
-        # Update magnetic field
         self.visual_dict["magnetic_field"] = self.B_fields[self.frame_count]
         self.visual_dict["angle"] = 90
 
-        # Clear previous visualization
         for child in self.visualizer.view.scene.children[:]:
             child.parent = None
 
-        # Create new visualization
         self.visualizer.visualize_atom(1)
 
-        # Save frame
         filename = os.path.join(self.frame_path, f"frame_{self.frame_count:04d}.png")
         img = self.visualizer.canvas.render()
         img = cv2.cvtColor(img, cv2.COLOR_RGBA2BGRA)
@@ -76,11 +68,9 @@ class OrbitalAnimator:
         if not frame_files:
             raise ValueError("Keine Frames gefunden!")
 
-        # Lese erste Frame für die Dimensionen
         first_frame = cv2.imread(os.path.join(self.frame_path, frame_files[0]))
         height, width, _ = first_frame.shape
 
-        # Video Writer Setup
         fourcc = cv2.VideoWriter_fourcc(*'mp4v')
         video_writer = cv2.VideoWriter(
             os.path.join(self.output_path, output_filename),
@@ -97,7 +87,6 @@ class OrbitalAnimator:
 
     def cleanup_frames(self):
         """Löscht die temporären Frame-Dateien."""
-        print("Cleaning up temporary files...")
         for file in os.listdir(self.frame_path):
             os.remove(os.path.join(self.frame_path, file))
         os.rmdir(self.frame_path)

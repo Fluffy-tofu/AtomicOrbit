@@ -17,9 +17,7 @@ class SingleOrbital(GeneralFunctions):
 
     def calculate_single_orbital_points(self, n, l, m, Z, field=0, num_points=100000,
                                         threshold=0.1, magnetic_field=False):
-        """
-        Improved point calculation with consistent array handling
-        """
+
         r, theta, phi = self.generate_grid(n, Z, num_points)
 
         if not magnetic_field:
@@ -27,18 +25,14 @@ class SingleOrbital(GeneralFunctions):
         else:
             density = self.probability_density_magnetic_field(n, l, r, Z, m, theta, phi, field)
 
-        # Normalize density
         max_density = np.max(density)
         if max_density > 0:
             density = density / max_density
 
-        # Create mask and apply it consistently
         mask = density >= threshold
 
-        # Convert to cartesian coordinates
         x, y, z = self.convert_cartesian(r, theta, phi)
 
-        # Apply mask to all arrays simultaneously
         x = x[mask]
         y = y[mask]
         z = z[mask]
@@ -76,10 +70,7 @@ class SingleOrbital(GeneralFunctions):
 
     def add_orbitals_single(self, n, l, m, Z, points_plotted, magnetic_field=False,
                             difference_wavefunctions=False):
-        """
-        Synchronized version of add_orbitals_single that ensures color and point arrays match exactly
-        """
-        # Calculate base orbital points
+
         x, y, z, density = self.calculate_single_orbital_points(n, l, m, Z,
                                                                 threshold=self.visual_dict["prob_threshold"],
                                                                 num_points=self.visual_dict["num_points"])
@@ -93,13 +84,11 @@ class SingleOrbital(GeneralFunctions):
                 magnetic_field=True
             )
 
-            # Create unified mask for both datasets
             if difference_wavefunctions:
                 min_size = min(len(x), len(x_mag))
                 if min_size == 0:
                     return points_plotted
 
-                # Truncate arrays to same size
                 x = x[:min_size]
                 y = y[:min_size]
                 z = z[:min_size]
@@ -110,7 +99,6 @@ class SingleOrbital(GeneralFunctions):
         points_plotted += len(x)
 
         if len(x) > 0:
-            # Generate colors using the exact same density array used for points
             if magnetic_field and not difference_wavefunctions:
                 colors = np.zeros((len(x), 4))
                 for i in range(len(x)):
@@ -144,7 +132,6 @@ class SingleOrbital(GeneralFunctions):
 
             edge_color = None if edges else colors
 
-            # Verify array lengths match before creating scatter plot
             if len(colors) != len(x):
                 print(f"Warning: Color array length {len(colors)} doesn't match point array length {len(x)}")
                 # Ensure arrays match by truncating to shorter length
@@ -212,7 +199,7 @@ def main():
         "point_size": 1,
         "prob_threshold": 0.1,
         "num_points": 1000000,
-        "magnectic_field": 1000000000000000,
+        "magnectic_field": 10000,
         "magnetic_field_comparison": True,
         "show_difference_wavefunctions": False,
         "Störtheorie Näherung": True

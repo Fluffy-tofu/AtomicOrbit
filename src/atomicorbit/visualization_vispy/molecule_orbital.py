@@ -48,7 +48,6 @@ class MoleculeOrbital(GeneralFunctions):
             return (x, y, z, density)
 
     def add_orbital(self, atom, angstroms, difference_wavefunctions):
-        """Visualize molecular orbital."""
         orbital = self.diatomic_molecule(angstroms, atom,
                                          num_points=self.visual_dict["num_points"],
                                          threshold=self.visual_dict["prob_threshold"],
